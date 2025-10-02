@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Order Has Been Shipped - Cart E-Commerce</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f9ff;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.12);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(90deg, #00b894, #0984e3);
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 20px;
+      color: #333;
+    }
+    .content h3 {
+      color: #0984e3;
+    }
+    .order-items {
+      margin: 20px 0;
+    }
+    .item {
+      border-bottom: 1px solid #e0f7fa;
+      padding: 12px 0;
+      display: flex;
+      align-items: center;
+    }
+    .item img {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      margin-right: 15px;
+      border-radius: 8px;
+      border: 2px solid #00cec9;
+    }
+    .item-details h4 {
+      margin: 0;
+      font-size: 16px;
+      color: #00b894;
+    }
+    .item-details p {
+      margin: 4px 0;
+      font-size: 14px;
+      color: #555;
+    }
+    .total {
+      margin: 15px 0;
+      font-size: 18px;
+      font-weight: bold;
+      color: #0984e3;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 14px 22px;
+      background: linear-gradient(90deg, #0984e3, #00cec9);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    .footer {
+      background: #f0f9ff;
+      text-align: center;
+      padding: 12px;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🚚 Your Order Has Been Shipped!</h2>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{user_name}}</strong>,</p>
+      <p>We’re excited to let you know that your order <strong>#{{order_id}}</strong> has <strong>been shipped</strong> and will arrive soon.</p>
+
+      <h3>Order Details:</h3>
+      <div class="order-items">
+        {{order_items}}
+      </div>
+
+      <p class="total">Total: ${{order_total}}</p>
+
+      <a href="/orders/{{order_id}}/track" class="btn">Track My Order</a>
+    </div>
+    <div class="footer">
+      © {{current_year}} Cart E-Commerce. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>
