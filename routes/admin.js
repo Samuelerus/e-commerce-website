@@ -12,7 +12,7 @@ const Order = require('../models/order');
 const Review = require('../models/review');
 
 //to add an item/product to the inventory
-route.post('/add_item', check_jwt_token, uploader("image"), async (req, res) => {
+route.post('/add_item', check_jwt_token, uploader.single("image"), async (req, res) => {
     const { role } = req.user;
     const { item_name, quantity, price, description, category, color, sizes, add_info } = req.body;
 

@@ -8,7 +8,13 @@ const app = express();
 app.use(express.json());
 
 //import my routes
-app.use('/auth');
+app.use('/admin', require('./routes/admin'));
+app.use('/auth', require('./routes/auth'));
+app.use('/orders', require('./routes/orders'));
+app.use('/payments', require('./routes/payments'));
+app.use('/products', require('./routes/products'));
+app.use('/profile', require('./routes/profile'));
+
 
 
 //connect to mongodb using the url in the env variable

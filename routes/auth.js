@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const check_jwt_token = require('../middleware/user_auth');
 const { generate_OTP, encrypt, decrypt } = require('../utils/otp');
 const { generate_profile_link, generate_password_reset_token } = require('../utils/special_use_tokens');
+const crypto = require('crypto');
 const mailer = require('../utils/nodemailer');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -45,7 +46,7 @@ route.post('/signup', async (req, res) => {
 
     try {
         //check if a user with this email already exists
-        let match = await User.find({ email: email }).lean();
+        const match = await User.findOne({ email: email }).lean();
         if (match) {
             return res.status(400).send({ status: 'error', msg: 'User with this email already exists' });
         }
@@ -104,16 +105,10 @@ route.post('/otp', async (req, res) => {
     try {
         const otp = generate_OTP();
         const encrypted = encrypt(otp, process.env.OTP_PASSKEY);
-        //store OTP with expiry (5 minutes)
-        let user = await User.findOneAndUpdate({ email: email },
-            {
-                otp: {
-                    code: encrypted,
-                    expires_at: new Date(Date.now() + 5 * 60 * 1000)
-                }
-            });
 
         //check if the user has a previous unused otp and delete it
+        const user = await User.findOne({ email });
+
         if (user.otp) {
             await User.findOneAndUpdate({ email: email },
                 {
@@ -121,6 +116,16 @@ route.post('/otp', async (req, res) => {
                 }
             )
         }
+
+        //store OTP with expiry (5 minutes)
+        await User.findOneAndUpdate({ email: email },
+            {
+                otp: {
+                    code: encrypted,
+                    expires_at: new Date(Date.now() + 5 * 60 * 1000)
+                }
+            });
+
         await mailer.send_otp_email(email, otp, "5", process.env.MAIL_USER);
         console.log("otp generated and email sent successfully")
         return res.status(201).send({ status: 'created', msg: "OTP generated and sent. Will expire in 5 minutes" });
@@ -178,7 +183,7 @@ route.post('/activate', async (req, res) => {
 });
 
 
-//to endpoint to login
+//endpoint to login
 route.put('/login', async (req, res) => {
     const { email, password } = req.body;
 
@@ -225,9 +230,9 @@ route.get('/forgot_password', async (req, res) => {
         return res.status(400).send({ 'status': 'error', msg: 'No email' });
     }
 
-    const token = generate_password_reset_token(email);
+    const token = await generate_password_reset_token(email);
 
-    await mailer.forgot_password_mail(email, `https://cart-ecommerce.com/reset_password?token=${token}&email=${email}`);
+    await mailer.forgot_password_mail(email, `https://cart-ecommerce.com/auth/reset_password?token=${token}&email=${email}`);
     return res.status(200).send({ status: 'ok', msg: 'Password reset link sent to email if it exists' });
 });
 
@@ -260,7 +265,7 @@ route.put('/reset_password', async (req, res) => {
             email,
             reset_password_token: hash,
             reset_password_expires: { $gt: Date.now() }
-        }).select('fullname').lean();
+        }).lean();
         if (!user) {
             return res.status(404).send({ status: 'error', msg: 'no such user found and/or invalid token' });
         }
@@ -269,8 +274,9 @@ route.put('/reset_password', async (req, res) => {
         const en_pass = await bcrypt.hash(newpass, 10);
         await User.updateOne({ email }, {
             password: en_pass,
-            reset_password_token: undefined,
-            reset_password_expires: undefined
+
+            $unset: { reset_password_token: "", reset_password_expires: "" }
+
         });
 
         return res.status(200).send({ status: 'ok', msg: 'Password successfully reset', user })

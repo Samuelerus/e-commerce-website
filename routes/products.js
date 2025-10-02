@@ -412,3 +412,5 @@ route.post('/amount', check_jwt_token, async (req, res) => {
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
     }
 });
+
+module.exports = route;

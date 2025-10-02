@@ -37,7 +37,6 @@ const welcome_mail = async (email, fullname, profile_link) => {
     }
 };
 
-//Question: ask how secure links are generated
 const forgot_password_mail = async (email, reset_link) => {
     let template_path = path.join(__dirname, '..', 'templates', "forgot_password_email.html");
     let template = fs.readFileSync(template_path, 'utf-8');
@@ -63,7 +62,7 @@ const send_otp_email = async (email, otp, expires_in, support_mail) => {
     let template_path = path.join(__dirname, '..', 'templates', "otp_email.html");
     let template = fs.readFileSync(template_path, 'utf-8');
     //replace placeholders
-    template = template.replace("{email}", email)
+    template = template.replace("email", email)
         .replace("{otp}", otp)
         .replace("{expires_in}", expires_in)
         .replace("{support_mail}", support_mail)
