@@ -36,10 +36,10 @@ const userSchema = new mongoose.Schema(
         default: { type: Boolean, required: true }
       }
     ],
-    profile_img_url: { type: String, default: undefined },
-    profile_img_id: { type: String, default: undefined },
-    reset_password_token: {type: String, default: undefined},
-    reset_password_expires: {type: Date, default: undefined},
+    profile_img_url: { type: String, default: null },
+    profile_img_id: { type: String, default: null },
+    reset_password_token: {type: String, default: null},
+    reset_password_expires: {type: Date, default: null},
     otp: {
       code: String,
       expires_at: Date

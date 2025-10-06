@@ -8,8 +8,8 @@ const itemSchema = new mongoose.Schema(
         item_name: String, // Name of the item
         quantity: Number, // Total quantity available,
         price: Number, // Price of the item in USD
-        discount_price: {type: Number, default: undefined}, //discount price if there is any
-        discount_expires: {type: Date, default: undefined}, //date when the discount expires
+        discount_price: {type: Number, default: null}, //discount price if there is any
+        discount_expires: {type: Date, default: null}, //date when the discount expires
         description: String, // Description of the item
         category: String, // Category of the item
         times_bought: {type: Number, default: 0}, // Number of times the item has been bought
@@ -17,9 +17,9 @@ const itemSchema = new mongoose.Schema(
         rate_count: {type: Number, default: 0}, // Total rating score of the item
         rate_number: {type: Number, default: 0}, //Total number of times the item has been rated
         rating: {type: Number, min: 0, max: 5, default: 0}, // Average rating of the item
-        colors: [], // Colors of the item (if applicable)
-        sizes: [], // Sizes of the item (if applicable)
-        add_info: {type: String, default: undefined}, //additional info about the item
+        colors: [String], // Colors of the item (if applicable)
+        sizes: [Number], // Sizes of the item (if applicable)
+        add_info: {type: String, default: null}, //additional info about the item
         item_image_url: String, // URL of the item's image
         item_image_id: String, // ID of the item's image in cloud storage
         timestamp: Date
@@ -35,7 +35,7 @@ itemSchema.pre('save', async function (next) {
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
-    this.custom_id = `user_${counter.seq.toString().padStart(3, '0')}`;
+    this.custom_id = `item_${counter.seq.toString().padStart(3, '0')}`;
   }
   next();
 });

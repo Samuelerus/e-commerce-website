@@ -87,7 +87,7 @@ route.get('verify/:reference', async (req, res) => {
 
 
 //paystack webhook for extra verification
-route.post('/webhook', async (req, res) => {
+route.post('/confirm_payment', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
 
     //verify signature

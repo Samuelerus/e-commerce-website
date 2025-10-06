@@ -197,8 +197,8 @@ route.post('/add_to_cart/:custom_id', check_jwt_token, async (req, res) => {
                         item_id: item._id,
                         item_name: item.item_name,
                         quantity: quantity || 1,
-                        color: color || undefined,
-                        size: size || undefined
+                        color: color || null,
+                        size: size || null
                     }
                 }
             }
@@ -309,8 +309,8 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
                 item_id: product._id,
                 item_name: product.item_name,
                 quantity: item.quantity,
-                color: item.color || undefined,
-                size: item.size || undefined
+                color: item.color || null,
+                size: item.size || null
             }
         });
 

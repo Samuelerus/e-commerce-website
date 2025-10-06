@@ -6,6 +6,7 @@ const check_jwt_token = require('../middleware/user_auth');
 const Item = require('../models/item');
 const Order = require('../models/order');
 const User = require('../models/user');
+const Review = require('../models/review');
 const { findById } = require('../models/counter');
 
 //to finalize an order
@@ -152,16 +153,53 @@ route.post('/rate&review', check_jwt_token, async (req, res) => {
         item.rate_count += rating;
         item.rate_number += 1;
         item.rating = (item.rate_count / item.rate_number).toFixed(1);
-        if (review) {
-            item.reviews.push({ user_id: user_id, rating: rating, review: review, timestamp: Date.now() });
-        }
         await item.save();
+        if (review) {
+            const user = await User.findById(user_id).lean();
+            const review = new Review();
+            review.user_id = user_id;
+            review.item_id = item_id;
+            review.username = user.fullname;
+            review.rating = rating;
+            review.review = review;
+            review.likes = 0;
+            review.timestamp = Date.now();
+            await review.save();
+        }
         return res.status(200).send({ status: "ok", msg: "Item rated/reviewed successfully", item: { item_name: item.item_name, rating: item.rating, reviews: item.reviews } })
     } catch (e) {
         console.error("Error rating/reviewing item ----->>>", e);
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
     }
 });
+
+//to like a review
+route.put('/rate&review/like/:review_id', check_jwt_token, async (req, res) => {
+    const {review_id} = req.params;
+    await Review.findByIdAndUpdate(review_id, 
+        {
+            $inc: {
+                likes: +1
+            }
+        }, {new: true}
+    ).lean();
+    return res.sendStatus(200)("Success");
+});
+
+
+//to remove a like on a review
+route.put('/rate&review/remove_like/:review_id', check_jwt_token, async (req, res) => {
+    const {review_id} = req.params;
+    await Review.findByIdAndUpdate(review_id, 
+        {
+            $inc: {
+                likes: -1
+            }
+        }
+    ).lean();
+    return res.sendStatus(200)("Success");
+});
+
 
 
 //to confirm you have recieved an order

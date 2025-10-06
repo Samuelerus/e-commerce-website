@@ -1,10 +1,10 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
-const Item = require('../models/user');
+const Item = require('../models/item');
 
 const discount = async (item_name, percent, expires) => {
-    const item = await Item.findOne({item_name: item_name});
+    const item = await Item.findOne({item_name: item_name}).lean();
     const discount = ((percent/100) * item.price);
     //set the discount price
     let discount_price = item.price - discount;

@@ -12,9 +12,9 @@ const Order = require('../models/order');
 const Review = require('../models/review');
 
 //to add an item/product to the inventory
-route.post('/add_item', check_jwt_token, uploader.single("image"), async (req, res) => {
+route.post('/add_item', check_jwt_token, uploader.single('image'), async (req, res) => {
     const { role } = req.user;
-    const { item_name, quantity, price, description, category, color, sizes, add_info } = req.body;
+    const { item_name, quantity, price, description, category, colors, sizes, add_info } = req.body;
 
     //check if all the required fields were entered
     if (!item_name || !quantity || !price || !description || !category) {
@@ -47,8 +47,8 @@ route.post('/add_item', check_jwt_token, uploader.single("image"), async (req, r
         item.item_name = item_name;
         item.quantity = quantity;
         item.price = price;
-        item.discount_price = undefined;
-        item.discount_expires = undefined;
+        item.discount_price = null;
+        item.discount_expires = null;
         item.description = description;
         item.category = category;
         item.times_bought = 0;
@@ -56,9 +56,9 @@ route.post('/add_item', check_jwt_token, uploader.single("image"), async (req, r
         item.rate_count = 0;
         item.rate_number = 0;
         item.rating = 0;
-        item.color = colors || [];
+        item.colors = colors || [];
         item.sizes = sizes || [];
-        item.add_info = add_info || undefined;
+        item.add_info = add_info || null;
         item.item_image_url = img_url;
         item.item_image_id = img_id;
         item.timestamp = Date.now();
@@ -66,14 +66,8 @@ route.post('/add_item', check_jwt_token, uploader.single("image"), async (req, r
         //save the item
         await item.save();
 
-        //create a new empty review array for the item
-        const review = new Review();
-        review.item_id = item._id;
+        return res.status(201).send({ status: 'created', msg: 'Item added successfully', item });
 
-
-
-
-        return res.status(201).send({ status: 'created', msg: 'Item added successfully', book });
     } catch (e) {
         console.error("Error adding item ----->>>", e);
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
@@ -100,25 +94,30 @@ route.put('/edit/:custom_id', check_jwt_token, uploader.single("image"), async (
         //replace picture if sent
         if (req.file) {
             //find the public id and url for the old profile picture
-            let product = Item.findOne(custom_id);
+            const product = await Item.findOne({ custom_id });
+            if (!product) {
+                return res.status(404).json({ message: "Product not found" });
+            }
 
-            let img_id = product.profile_img_id;
+            let img_id = product.item_image_id;
             //upload replacement profile pic to cloudinary
             const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: "range_user_profile_pics",
+                folder: "product_images",
                 public_id: img_id,
                 overwrite: true,
+                invalidate: true,
             });
             let img_url = result.secure_url;
+            console.log(result)
             //update img_url
-            await Item.findOneAndUpdate({ custom_id: custom_id }, { profile_img_url: img_url });
+            await Item.findOneAndUpdate({ custom_id: custom_id }, { item_image_url: img_url });
         }
 
         //find the item 
         const existing_item = await Item.findOne({ custom_id: custom_id }).lean();
 
         //edit it's info
-        const item = await Book.findOneAndUpdate({ custom_id: custom_id }, {
+        const item = await Item.findOneAndUpdate({ custom_id: custom_id }, {
             item_name: item_name || existing_item.item_name,
             quantity: quantity || existing_item.quantity,
             price: price || existing_item.price,

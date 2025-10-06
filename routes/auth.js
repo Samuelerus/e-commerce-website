@@ -8,7 +8,6 @@ const crypto = require('crypto');
 const mailer = require('../utils/nodemailer');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-const mongoose = require('mongoose');
 
 
 const User = require('../models/user');

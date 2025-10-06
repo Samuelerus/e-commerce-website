@@ -9,7 +9,7 @@ const reviewSchema = new mongoose.Schema(
         review: String,
         likes: Number,
         timestamp: { type: Date, default: Date.now }
-    }, { _id: false }, // Prevent creation of _id for subdocuments
+    },
     { collection: 'reviews' }
 );
 
