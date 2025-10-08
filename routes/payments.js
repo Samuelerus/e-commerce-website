@@ -4,6 +4,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const check_jwt_token = require('../middleware/user_auth');
 const mailer = require('../utils/nodemailer');
+const {create_payment} = require('../utils/paystack');
 require('dotenv').config();
 
 const User = require('../models/user');
@@ -15,8 +16,8 @@ const { find } = require('../models/counter');
 // to perform a transaction with a saved card on paystack
 route.post('/transaction/charge_authorization', check_jwt_token, async (req, res) => {
     const { user_id, email } = req.user;
-    const { order_id, card_id, total } = req.body;
-    if (!order_id || !card_id || !total) {
+    const { order_id, total } = req.body;
+    if (!order_id || !total) {
         return res.status(400).send({ status: 'error', msg: "some parameters missing" })
     }
 
@@ -29,29 +30,10 @@ route.post('/transaction/charge_authorization', check_jwt_token, async (req, res
 
         const order_items = order.items;
         const item_names = order_items.map(item => item.item_name).join(", ");
-        const card = await User.findOne(
-            { _id: user_id },
-            { arrayField: { $elemMatch: { _id: card_id } } }
-        );
-        if (!card) {
-            return res.status(404).send({ msg: "Saved card not found" })
-        }
-
-        const response = await axios.post(
-            "https://api.paystack.co/transaction/charge_authorization",
-            {
-                email: email,
-                amount: total * 100,
-                authorization_code: card.authorization_code,
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-                },
-            }
-        );
+        
+        const response = await create_payment(email, total)
         await mailer.payment_verify_mail(email, order_id, item_names, total)
-        res.status(200).send({ status: 'ok', msg: `Transaction status: ${response.data}` })
+        res.status(200).send({ status: 'ok', msg: `Transaction status: pending` })
 
     } catch (e) {
         console.error("Transaction failed ----->>>", e);
@@ -60,30 +42,32 @@ route.post('/transaction/charge_authorization', check_jwt_token, async (req, res
 });
 
 
-//to verify payments
-route.get('verify/:reference', async (req, res) => {
-    const { reference } = req.params;
-    try {
-        const response = await axios.get(
-            `https://api.paystack.co/transaction/verify/${reference}`,
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-                },
-            }
-        );
-        const data = response.data.data;
 
-        if (data.status === "success") {
-            return res.status(200).send({ status: "ok", msg: "Transaction was successful", data })
-        }
+//under review
+// //to verify payments
+// route.get('verify/:reference', async (req, res) => {
+//     const { reference } = req.params;
+//     try {
+//         const response = await axios.get(
+//             `https://api.paystack.co/transaction/verify/${reference}`,
+//             {
+//                 headers: {
+//                     Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+//                 },
+//             }
+//         );
+//         const data = response.data.data;
 
-        return res.status(200).send(data);
-    } catch (e) {
-        console.error("Transaction failed ----->>>", e);
-        return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
-    }
-});
+//         if (data.status === "success") {
+//             return res.status(200).send({ status: "ok", msg: "Transaction was successful", data })
+//         }
+
+//         return res.status(200).send(data);
+//     } catch (e) {
+//         console.error("Transaction failed ----->>>", e);
+//         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
+//     }
+// });
 
 
 //paystack webhook for extra verification

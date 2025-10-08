@@ -45,8 +45,8 @@ route.get('/search_by_categories', async (req, res) => {
             .skip((page - 1) * limit)
             .limit(limit)
             .lean();
-        let count = books.length;
-        let msg = "Success"
+        let count = items.length;
+        let msg = `Success, ${count} results found`
         if (count === 0) {
             msg = "Nothing in this category"
         }
@@ -71,7 +71,7 @@ route.get('/search_by_name', async (req, res) => {
             .sort({ units_bought: -1 })
             .lean();
         let count = items.length;
-        let msg = "Success";
+        let msg = `Success, ${count} results found`;
         if (count === 0) {
             msg = "No result found"
         }
@@ -94,7 +94,7 @@ route.get('/popular', async (req, res) => {
             .limit(limit)
             .lean();
         let count = items.length;
-        let msg = "Success";
+        let msg = `Success, ${count} results found`;
         if (count === 0) {
             msg = "No products"
             return res.status(404).send({ msg })
@@ -118,7 +118,7 @@ route.get('/flash_sale', async (req, res) => {
             .limit(limit)
             .lean();
         let count = items.length;
-        let msg = "Success";
+        let msg = `Success, ${count} items found`;
         if (count === 0) {
             msg = "Nothing on flash sale"
             return res.status(404).send({ msg })
@@ -132,11 +132,11 @@ route.get('/flash_sale', async (req, res) => {
 
 
 //to preview a product before ordering
-route.get('/preview', async (req, res) => {
-    const { name } = req.query;
+route.get('/preview/:custom_id', async (req, res) => {
+    const { custom_id } = req.params;
     try {
         //find the product
-        const item = await Item.findOne({ item_name: name }).lean();
+        const item = await Item.findOne({ custom_id: custom_id }).lean();
         //throw error if not found
         if (!item) {
             return res.status(404).send({ status: "error", msg: "Item not found" })
@@ -190,7 +190,7 @@ route.post('/add_to_cart/:custom_id', check_jwt_token, async (req, res) => {
             return res.status(404).send({ status: "error", msg: "Item not found" })
         }
         //push item to user's cart in the cart collection
-        await Cart.updateOne({ user: user_id },
+        await Cart.updateOne({ user_id: user_id },
             {
                 $push: {
                     items: {
@@ -215,12 +215,13 @@ route.get('/view_cart', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
     try {
         //find the user cart by their id and check the items in their cart
-        const cart = await Cart.findOne({ user: user_id }).populate('items.item_name', '-__v -timestamp').lean();
+        const cart = await Cart.findOne({ user_id: user_id }).populate('items.item_name', '-__v -timestamp').lean();
         if (!cart) {
             return res.status(404).send({ status: "error", msg: "Cart not found" })
         }
         //check if they have anything in their cart
-        if (cart.items.length === 0) {
+        const count = cart.items.length;
+        if (count === 0) {
             return res.status(404).send({ status: "error", msg: "Cart is empty" })
         }
         const items = cart.items
@@ -232,7 +233,7 @@ route.get('/view_cart', check_jwt_token, async (req, res) => {
         const more = await Item.find({})
             .limit(15)
             .lean();
-        return res.status(200).send({ status: 'ok', msg: "Success", items, top_selling, more })
+        return res.status(200).send({ status: 'ok', msg: `Success, ${count} items in cart`, items, top_selling, more })
     } catch (e) {
         console.error("Some error occurred ----->>>", e);
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
@@ -250,15 +251,15 @@ route.post('/save/:custom_id', check_jwt_token, async (req, res) => {
             return res.status(404).send({ status: "error", msg: "Item not found" })
         }
         //push item to user's saved items
-        await User.updateOne({ user: user_id },
+        await User.updateOne({ _id: user_id },
             {
                 $push: {
-                    saved: {
+                    saved_items: {
                         item_id: item._id
                     }
                 }
             }
-        );
+        ).lean();
         return res.status(200).send({ status: "ok", msg: "Item saved" })
     } catch (e) {
         console.error("Error saving ----->>>", e);
@@ -267,52 +268,38 @@ route.post('/save/:custom_id', check_jwt_token, async (req, res) => {
 });
 
 
-//to view saved items
-route.get('/view_saved', check_jwt_token, async (req, res) => {
-    const { user_id } = req.user;
-    try {
-        //find the user cart by their id and check the items in their cart
-        const user = await User.findById(user_id);
-        if (!user) {
-            return res.status(404).send({ status: "error", msg: "No user found" })
-        }
-        //check if they have anything in their saved items
-        if (user.saved_items.length === 0) {
-            return res.status(404).send({ status: "error", msg: "No saved products" })
-        }
-        const items = user.saved_items;
-        return res.status(200).send({ status: 'ok', msg: "Success", items })
-    } catch (e) {
-        console.error("Some error occurred ----->>>", e);
-        return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
-    }
-});
-
-
 //to checkout a product
 route.post('/checkout', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
-    const { items } = req.body;
+    const { item_ids } = req.body;
 
-    if (!items || items.length === 0) {
+    if (!item_ids || item_ids.length === 0) {
         return res.status(400).send({ status: 'error', msg: "Enter items to checkout" });
     }
     try {
         let total_amount = 0;
-        //get the necessary details from the items array to create an order
-        const order_items = items.map(async (item) => {
-            const product = await Item.findOne({ custom_id: item.custom_id }).lean();
-            const price = product.discount_price || product.price;
-            const subtotal = price * item.quantity;
-            total_amount += subtotal;
-            return {
-                item_id: product._id,
-                item_name: product.item_name,
-                quantity: item.quantity,
-                color: item.color || null,
-                size: item.size || null
-            }
-        });
+        //fetch the items from their item ids
+        const order_items = await Promise.all(
+            item_ids.map(async (item_id) => {
+                const cart_item = await Cart.findOne({ user_id }).lean();
+                const item = await cart_item.items.find(i => String(i.item_id) === item_id);
+                const product = await Item.findById(item_id).lean();
+                if (product.quantity === 0) {
+                    return res.status(400).send({ msg: "No units available for product" })
+                }
+                const price = product.discount_price || product.price;
+                const subtotal = price * item.quantity;
+                total_amount += subtotal;
+                return {
+                    item_id: item_id,
+                    item_name: product.item_name,
+                    quantity: item.quantity,
+                    color: item.color || null,
+                    size: item.size || null,
+                    item_image_url: product.item_image_url
+                }
+            })
+        );
 
         //create a new pending order
         const order = new Order();
@@ -327,13 +314,14 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
         order.timestamp = Date.now();
         await order.save();
 
-        //find the user's saved cards
+        let msg_2 = "Success!"
+        //find the user's saved cards and addresses
         const user = await User.findById(user_id).select('saved_cards').lean();
         if (!user) {
             return res.status(404).send({ status: "error", msg: "No user found" })
         }
-        if (!user.saved_cards || user.saved_cards.length === 0) {
-            return res.status(404).send({ status: "error", msg: "No saved cards found, add one or initialize a new transaction" })
+        if (!user.saved_cards || user.saved_cards.length === 0 || !user.addresses || user.addresses.length === 0) {
+            msg_2 = "No cards and/or addresses"
         }
 
         //mask the user's cards and send
@@ -347,14 +335,10 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
             bank: card.bank
         }));
 
-        //find the user's addresses
-        if (!user.addresses || user.addresses.length === 0) {
-            return res.status(404).send({ status: "error", msg: "No saved addresses found, add a new one" })
-        }
         const addresses = await User.findById(user_id).select('addresses').lean();
 
         return res.status(201).send({
-            status: "ok", msg: "Order created successfully, pending",
+            status: "ok", msg_1: "Order created successfully, pending", msg_2,
             order: order.id,
             saved_cards: masked,
             addresses
@@ -364,7 +348,6 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
     }
 });
-
 
 
 //to select address and calculate the total order amount
@@ -380,19 +363,29 @@ route.post('/amount', check_jwt_token, async (req, res) => {
         }
 
         // Find the user and the particular address from their addresses
-        const address = await User.findOne(
-            { "addresses._id": address_id }, //find the address
-            { "addresses.$": 1 } // $ projection returns only the matching element
-        );
+        const address = address_id
+            ? await User.findOne(
+                { "addresses._id": address_id }, //find the address
+                { "addresses.$": 1 } // $ projection returns only the matching element
+            ).catch(() => null) //catch null error if no address_id
+            : null;
+
+        //find the default address if no address_id is entered
+        const default_address = await User.findOne(
+            { "addresses.default": true },
+            { "addresses.$": 1 }
+        )
+
+        const final_address = address || default_address;
 
         //calulate the delivery fee from the order address and the amount
-        const state = address.state || "";
+        const state = final_address.addresses[0].state || "";
         const amount = order.total_amount;
-        const delivery_fee = calculate_delivery_fee(state, amount);
+        const delivery_fee = calculate_delivery_fee(amount, state);
         const new_total = amount + delivery_fee;
 
         //push the delivery address and new total to the order
-        order.delivery_address = address;
+        order.delivery_address = final_address ? final_address.addresses[0] : default_address.addresses[0];
         order.delivery_fee = delivery_fee;
         order.total_amount = new_total;
         await order.save();
@@ -400,11 +393,11 @@ route.post('/amount', check_jwt_token, async (req, res) => {
         return res.status(200).send({
             status: "ok", msg: "Success",
             order_id,
-            address,
+            address: final_address,
             subtotal: amount,
             delivery_fee,
             total: new_total,
-            currency: "USD"
+            currency: "NGN"
         })
 
     } catch (e) {

@@ -9,7 +9,8 @@ const cartSchema = new mongoose.Schema(
                 item_name: { type: String, required: true },
                 quantity: { type: Number, default: 1, required: true },
                 color: String,
-                size: Number
+                size: Number,
+                item_image_url: String
             }
         ],
         timestamp: Date

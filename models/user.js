@@ -19,11 +19,13 @@ const userSchema = new mongoose.Schema(
         exp_month: String,
         exp_year: String,
         bank: String,
+        _id: false
       }
     ],
     saved_items: [
       {
-        item_id: { type: mongoose.Schema.Types.ObjectId, ref: "Item" }
+        item_id: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
+        _id: false
       }
     ],
     addresses: [

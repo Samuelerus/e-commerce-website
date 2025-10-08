@@ -1,6 +1,7 @@
 const express = require('express');
 const route = express.Router();
 const bcrypt = require('bcryptjs');
+const axios = require('axios');
 const check_jwt_token = require('../middleware/user_auth');
 const cloudinary = require('../utils/cloudinary');
 const uploader = require('../utils/multer');
@@ -39,9 +40,9 @@ route.put('/edit_profile', check_jwt_token, uploader.single("image"), async (req
         //add/replace profile picture if sent
         if (req.file) {
             //find the public id and url for the old profile picture if there is one
-            let p_user = User.findById(user_id);
+            const p_user = await User.findById(user_id).lean();
 
-            if (p_user) {
+            if (p_user.profile_img_id) {
                 let img_id = p_user.profile_img_id
                 //upload replacement profile pic to cloudinary
                 const result = await cloudinary.uploader.upload(req.file.path, {
@@ -58,7 +59,7 @@ route.put('/edit_profile', check_jwt_token, uploader.single("image"), async (req
                 let img_id = "";
                 //upload image to cloudinary
                 const result = await cloudinary.uploader.upload(req.file.path, {
-                    folder: "_user_profile_pics"
+                    folder: "cart_user_profile_pics"
                 });
                 img_url = result.secure_url;
                 img_id = result.public_id;
@@ -66,6 +67,11 @@ route.put('/edit_profile', check_jwt_token, uploader.single("image"), async (req
                 await User.findByIdAndUpdate(user_id, { profile_img_url: img_url, profile_img_id: img_id });
             }
         }
+        //if a phone number is entered, check that it's 11 digits
+        if (phone_no && !/^\d{11}$/.test(phone_no)) {
+            return res.status(400).send({ status: 'error', msg: "Phone number must be 11 digits" });
+        };
+
         //find the user to get current details
         let existing_user = await User.findById(user_id).lean();
 
@@ -83,17 +89,21 @@ route.put('/edit_profile', check_jwt_token, uploader.single("image"), async (req
 });
 
 
-//to view your saved items
-route.get('/saved_items', check_jwt_token, async (req, res) => {
+//to view saved items
+route.get('/view_saved', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
     try {
-        //find the user's saved items and display them
+        //find the user cart by their id and check the items in their cart
         const user = await User.findById(user_id).lean();
-        if (user.saved.length === 0) {
-            return res.status(404).send({ status: "error", msg: "Nothing in saved" })
+        if (!user) {
+            return res.status(404).send({ status: "error", msg: "No user found" })
         }
-        const saved = user.saved;
-        return res.status(200).send({ status: 'ok', msg: "Success", saved })
+        //check if they have anything in their saved items
+        if (user.saved_items.length === 0) {
+            return res.status(404).send({ status: "error", msg: "No saved products" })
+        }
+        const items = user.saved_items;
+        return res.status(200).send({ status: 'ok', msg: `Success, ${items.length} results found`, items })
     } catch (e) {
         console.error("Some error occurred ----->>>", e);
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
@@ -109,7 +119,7 @@ route.get('/address_book/view', check_jwt_token, async (req, res) => {
         const user = await User.findById(user_id).lean();
         const addresses = user.addresses;
         if (addresses.length === 0) {
-            return res.status(404).send({ status: "error", msg: "No addresses saved. Please add" })
+            return res.status(200).send({ status: "ok", msg: "No addresses saved. Please add" })
         }
         return res.status(200).send({ status: 'ok', msg: "Success", addresses });
     } catch (e) {
@@ -136,7 +146,7 @@ route.post('/address_book/add', check_jwt_token, async (req, res) => {
                         phone_no: phone_no || user.phone_no,
                         address: address,
                         city: city,
-                        state: String,
+                        state: state,
                         default: false
                     }
                 }
@@ -154,12 +164,30 @@ route.put('/address_book/edit/:adress_id', check_jwt_token, async (req, res) => 
     const { user_id } = req.user;
     const { adress_id } = req.params;
     const { fullname, phone_no, address, city, state, default_address } = req.body;
+    if (!adress_id || !mongoose.Types.ObjectId.isValid(adress_id)) {
+        return res.status(400).send({ 'status': 'error', msg: 'No ID or invalid format' })
+    }
+
     if (!req.body || Object.keys(req.body).length === 0) {
         return res.status(204).send({ status: 'ok', msg: "Nothing edited" });
     }
+
+    if (default_address && typeof default_address !== 'boolean' && default_address !== 'true') {
+        return res.status(400).send({ status: 'error', msg: "Invalid paramter for default" });
+    }
+
     try {
         //find the user
         const user = await User.findById(user_id).lean();
+        //unset the previous default if default was sent
+        if (default_address && default_address === "true") {
+            await User.updateOne(
+                { "addresses.default": true },           // find the document with that address
+                { $set: { "addresses.$.default": false } } // update that matching address to now have a false default
+            )
+        }
+
+
         //update the information provided
         await User.updateOne({ _id: user_id, "addresses._id": adress_id },
             {
@@ -182,7 +210,7 @@ route.put('/address_book/edit/:adress_id', check_jwt_token, async (req, res) => 
 
 
 //to delete an address
-route.put('/address_book/delete/:_id', check_jwt_token, async (req, res) => {
+route.delete('/address_book/delete/:_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
     const { _id } = req.params;
     //check if a valid id was sent
@@ -220,8 +248,7 @@ route.post('/cards/add_card', check_jwt_token, async (req, res) => {
             "https://api.paystack.co/transaction/initialize",
             {
                 email: user.email,
-                amount: 0,
-                channels: ["card"],
+                amount: 100,
             },
             {
                 headers: {
