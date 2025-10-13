@@ -5,13 +5,13 @@ require('dotenv').config();
 const app = express();
 
 //parse JSON data coming in as requests
+app.use('/payments', require('./routes/payments'));
 app.use(express.json());
 
 //import my routes
 app.use('/admin', require('./routes/admin'));
 app.use('/auth', require('./routes/auth'));
 app.use('/orders', require('./routes/orders'));
-app.use('/payments', require('./routes/payments'));
 app.use('/products', require('./routes/products'));
 app.use('/profile', require('./routes/profile'));
 

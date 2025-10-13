@@ -207,7 +207,7 @@ route.put('/login', async (req, res) => {
                 process.env.JWT_SECRET_KEY,
                 { expiresIn: '1d' }
             );
-            return res.status(200).send({ status: 'ok', msg: 'Successful login', user, token });
+            return res.status(200).send({ status: 'ok', msg: 'Successful login', token });
 
         }
 

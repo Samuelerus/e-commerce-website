@@ -9,6 +9,7 @@ const discount = require('../functions/discount');
 
 const Item = require('../models/item');
 const Order = require('../models/order');
+const User = require('../models/user');
 const Review = require('../models/review');
 
 //to add an item/product to the inventory
@@ -189,7 +190,7 @@ route.post('/mark_shipped', check_jwt_token, async (req, res) => {
         }
 
         //find the owner of the order
-        const user = await Order.findById(order_id).populate('user_id').lean();
+        const user = await User.findById(order.user_id).lean();
         if (!user) {
             return res.status(404).send({ status: "error", msg: "No customer associated with this order" });
         }
@@ -232,7 +233,7 @@ route.post('/mark_delivered', check_jwt_token, async (req, res) => {
     }
 
     //find the owner of the order
-    const user = await Order.findById(order_id).populate('user_id').lean();
+    const user = await User.findById(order.user_id).lean();
     if (!user) {
         return res.status(404).send({ status: "error", msg: "No customer associated with this order" });
     }

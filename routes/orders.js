@@ -1,6 +1,7 @@
 const express = require('express');
 const route = express.Router();
 const check_jwt_token = require('../middleware/user_auth');
+const mongoose = require('mongoose');
 
 
 const Item = require('../models/item');
@@ -33,11 +34,16 @@ route.post('/confirm', check_jwt_token, async (req, res) => {
         }
 
         //increase the number of times bought of each item by 1 and the units bought by quantity
-        const items = await Order.findById(order_id).populate('items.item_id').lean();
-        for (const order_item of items) {
-            const item = await Item.findById(order_item._id)
+        // Use the already-fetched order and its items array
+        if (!Array.isArray(order.items)) {
+            return res.status(400).send({ status: 'error', msg: 'Order items missing or not an array' });
+        }
+        for (const order_item of order.items) {
+            // order_item.item_id may be an ObjectId or a populated object
+            const item_id = order_item.item_id && order_item.item_id._id ? order_item.item_id._id : order_item.item_id;
+            const item = await Item.findById(item_id);
             if (item) {
-                item.times_bought += 1
+                item.times_bought += 1;
                 item.units_bought += order_item.quantity;
                 await item.save();
             }
@@ -79,7 +85,7 @@ route.get('/my_orders', check_jwt_token, async (req, res) => {
 
 
 //to view a specific order
-route.get('/:order_id', check_jwt_token, async (req, res) => {
+route.get('/view/:order_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
     const { order_id } = req.params;
     if (!order_id) {
@@ -132,9 +138,10 @@ route.post('/cancel', check_jwt_token, async (req, res) => {
 
 
 //to rate and review delivered items
-route.post('/rate&review', check_jwt_token, async (req, res) => {
+route.post('/rate&review/:item_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
-    const { item_id, rating, review } = req.body;
+    const { item_id } = req.params;
+    const { rating, comment } = req.body;
     if (!item_id || !rating || rating < 1 || rating > 5) {
         return res.status(400).send({ status: 'error', msg: "Bad request" })
     }
@@ -161,7 +168,7 @@ route.post('/rate&review', check_jwt_token, async (req, res) => {
             review.item_id = item_id;
             review.username = user.fullname;
             review.rating = rating;
-            review.review = review;
+            review.review = comment;
             review.likes = 0;
             review.timestamp = Date.now();
             await review.save();
@@ -174,51 +181,81 @@ route.post('/rate&review', check_jwt_token, async (req, res) => {
 });
 
 //to like a review
-route.put('/rate&review/like/:review_id', check_jwt_token, async (req, res) => {
-    const {review_id} = req.params;
-    await Review.findByIdAndUpdate(review_id, 
-        {
-            $inc: {
-                likes: +1
+route.post('/rate&review/like/:review_id/:flag', check_jwt_token, async (req, res) => {
+    const { review_id, flag } = req.params;
+
+    //check if that user has liked before, if they have a flag will be attached
+    if (flag === "true") {
+        await Review.findByIdAndUpdate(review_id,
+            {
+                $inc: {
+                    likes: -1
+                }
             }
-        }, {new: true}
-    ).lean();
-    return res.sendStatus(200)("Success");
+        ).lean();
+        return res.sendStatus(200);
+    }
+
+    else if (flag === "false") {
+        await Review.findByIdAndUpdate(review_id,
+            {
+                $inc: {
+                    likes: +1
+                }
+            }, { new: true }
+        ).lean();
+        return res.sendStatus(200)
+    }
+
+    else {
+        return res.status(400).send({ status: "error", msg: "Bad request" })
+    }
 });
 
 
-//to remove a like on a review
-route.put('/rate&review/remove_like/:review_id', check_jwt_token, async (req, res) => {
-    const {review_id} = req.params;
-    await Review.findByIdAndUpdate(review_id, 
-        {
-            $inc: {
-                likes: -1
-            }
-        }
-    ).lean();
-    return res.sendStatus(200)("Success");
-});
+// //to remove a like on a review
+// route.put('/rate&review/remove_like/:review_id', check_jwt_token, async (req, res) => {
+//     const { review_id } = req.params;
+//     await Review.findByIdAndUpdate(review_id,
+//         {
+//             $inc: {
+//                 likes: -1
+//             }
+//         }
+//     ).lean();
+//     return res.sendStatus(200)("Success");
+// });
 
 
 
 //to confirm you have recieved an order
-route.post('/:order_id/confirm', check_jwt_token, async (req, res) => {
+route.post('/:order_id/confirm_delivery', check_jwt_token, async (req, res) => {
     const { order_id } = req.params;
     const { recieved } = req.query;
     if (!order_id || !recieved) {
-        res.sendStatus(400)({ status: "error", msg: "Bad request" })
+        return res.sendStatus(400)({ status: "error", msg: "Bad request" })
     }
+
+    //check if the order id is valid
+    if (!mongoose.Types.ObjectId.isValid(order_id)) {
+        return res.status(400).send({ status: "error", msg: "Invalid order ID" });
+    }
+
+    //check if the user confirmed yes or no
     if (recieved === "no") {
-        res.sendStatus(200)({ msg: "support will be contacted and get back to you with a form" })
+        return res.status(200).send({ status: "ok", msg: "support will be contacted and get back to you with a form" })
     }
 
     try {
         //find the order and update it to delivered
-        const order = findById(order_id).lean();
+        const order = await Order.findById(order_id).lean();
+        if (!order) {
+            return res.status(404).send({ status: "error", msg: "No order found" })
+        }
 
         if (order.delivery_status !== "shipped") {
-            return res.status(403).send({ msg: "Order already delivered, cancelled or still pending" })
+            console.log(order.delivery_status)
+            return res.status(403).send({ status: "error", msg: "Order already delivered, cancelled or still pending" })
         }
 
         const delivered_order = await Order.findByIdAndUpdate(order_id,

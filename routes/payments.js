@@ -5,16 +5,18 @@ const crypto = require('crypto');
 const check_jwt_token = require('../middleware/user_auth');
 const mailer = require('../utils/nodemailer');
 const {create_payment} = require('../utils/paystack');
+const verify_paystack_signature = require('../middleware/verify_paystack_signature');
 require('dotenv').config();
 
 const User = require('../models/user');
 const Order = require('../models/order');
 const { find } = require('../models/counter');
+const { appendFile } = require('fs');
 
 
 
 // to perform a transaction with a saved card on paystack
-route.post('/transaction/charge_authorization', check_jwt_token, async (req, res) => {
+route.post('/transaction/charge_authorization', express.json({'content-type': 'application/json'}), check_jwt_token, async (req, res) => {
     const { user_id, email } = req.user;
     const { order_id, total } = req.body;
     if (!order_id || !total) {
@@ -73,39 +75,12 @@ route.post('/transaction/charge_authorization', check_jwt_token, async (req, res
 
 
 //paystack webhook for extra verification
-route.post('/confirm_payment', express.raw({ type: 'application/json' }), async (req, res) => {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
-
-    // Extract raw body: prefer route-level raw buffer, then req.rawBody set by global verify,
-    // then fallback to stringified JSON. We convert buffers to string.
-    const raw = Buffer.isBuffer(req.body)
-        ? req.body.toString('utf8')
-        : (typeof req.rawBody === 'string' ? req.rawBody : (req.body ? JSON.stringify(req.body) : ''));
-
-    if (!raw) {
-        console.warn('Paystack webhook: raw body is empty or missing; signature verification may fail.');
-    }
-
-    const hash = crypto.createHmac('sha512', secret).update(raw).digest('hex');
-
-    const signature = req.headers['x-paystack-signature'];
-    if (!signature) {
-        console.warn('Paystack webhook: no x-paystack-signature header present.');
-        return res.status(400).send({ status: 'error', msg: 'Missing signature header' });
-    }
-
-    console.log(hash, signature)
-    if (hash === signature) {
-        // Parse event from the verified raw body
-        let event;
-        try {
-            event = JSON.parse(raw);
-        } catch (err) {
-            console.error('Failed to parse webhook JSON:', err);
-            return res.status(400).send({ status: 'error', msg: 'Invalid JSON payload' });
-        }
-
-        
+route.post('/confirm_payment', express.json({
+        verify: (req, res, buf) => {
+            req.rawBody = buf.toString(); // keep raw body for verification
+        },
+    }), verify_paystack_signature, async (req, res) => {
+        const event = req.body;
         const charge_status = event.event;
         console.log(`This is the status -----> ${charge_status}`);
         if (charge_status === "charge.success") {
@@ -171,6 +146,6 @@ route.post('/confirm_payment', express.raw({ type: 'application/json' }), async 
             return res.json({ charge_status, order })
         }
     }
-});
+);
 
 module.exports = route;

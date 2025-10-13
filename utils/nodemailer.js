@@ -199,7 +199,7 @@ const order_shipped_mail = async (email, fullname, order_id) => {
 
 
 const order_delivered_mail = async (email, fullname, order_id) => {
-    let template_path = path.join(__dirname, '..', 'templates', "order_shipped.html");
+    let template_path = path.join(__dirname, '..', 'templates', "order_delivered.html");
     let template = fs.readFileSync(template_path, 'utf-8');
 
     const order = await Order.findById(order_id)
@@ -211,7 +211,7 @@ const order_delivered_mail = async (email, fullname, order_id) => {
     const address = Object.entries(address_obj)
         .filter(([key]) => !exclude.includes(key)) // drop unwanted keys
         .map(([_, value]) => value)
-        .join(", ");
+        .join(" ");
 
     let items_html = "";
     order.items.forEach(item => {
