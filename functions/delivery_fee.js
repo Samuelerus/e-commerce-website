@@ -12,4 +12,3 @@ const calculate_delivery_fee = (amount, state) => {
 
 
 module.exports = calculate_delivery_fee;
-

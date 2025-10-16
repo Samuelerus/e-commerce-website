@@ -131,7 +131,7 @@ route.post('/confirm_payment', express.json({
             return res.status(200).send({ charge_status, order })
         }
 
-        if (charge_status === "charge.failed") {
+        if (charge_status === "charge.timeout" || charge_status === "charge.failed" || charge_status === "charge.abandoned") {
             // Update order status to "failed"
             const reference = event.data.reference;
             const order = await Order.findOneAndUpdate(

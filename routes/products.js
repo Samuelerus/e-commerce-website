@@ -4,6 +4,7 @@ const check_jwt_token = require('../middleware/user_auth');
 const calculate_delivery_fee = require('../functions/delivery_fee');
 const cloudinary = require('../utils/cloudinary');
 const uploader = require('../utils/multer');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 
@@ -287,6 +288,15 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
                 if (product.quantity === 0) {
                     return res.status(400).send({ msg: "No units available for product" })
                 }
+                if (item.quantity > product.quantity) {
+                    return res.status(400).send({ msg: `Only ${product.quantity} units available for ${product.item_name}` })
+                }
+                if (product.discount_expires && product.discount_expires < Date.now()) {
+                    //if discount has expired, remove it
+                    await Item.updateOne({ _id: product._id }, { $set: { discount_price: null, discount_expires: null } });
+                    product.discount_price = null;
+                    product.discount_expires = null;
+                }
                 const price = product.discount_price || product.price;
                 const subtotal = price * item.quantity;
                 total_amount += subtotal;
@@ -351,12 +361,26 @@ route.post('/checkout', check_jwt_token, async (req, res) => {
 
 
 //to select address and calculate the total order amount
-route.post('/amount', check_jwt_token, async (req, res) => {
+route.post('/amount/:order_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
-    const { order_id, address_id } = req.body;
+    const { order_id } = req.params;
+    const { address_id } = req.body;
+
+    //check for order id
+    if (!order_id) {
+        return res.status(400).send({ status: 'error', msg: "No order id" });
+    }
+
+    //check if order id is valid
+    if (!mongoose.Types.ObjectId.isValid(order_id)) {
+        return res.status(400).send({ status: 'error', msg: "Invalid order id" });
+    }
 
     try {
         const order = await Order.findById(order_id);
+        if (!order) {
+            return res.status(404).send({ status: "error", msg: "Order not found" })
+        }
         //ensure the order belongs to the user
         if (order.user_id.toString() !== user_id) {
             return res.status(403).send({ status: "error", msg: "Order does not belong to user" })
@@ -375,6 +399,9 @@ route.post('/amount', check_jwt_token, async (req, res) => {
             { "addresses.default": true },
             { "addresses.$": 1 }
         )
+        if (!default_address) {
+            return res.status(404).send({ status: "error", msg: "No default address found, please add an address" })
+        }
 
         const final_address = address || default_address;
 

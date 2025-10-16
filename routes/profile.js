@@ -11,6 +11,7 @@ const mongoose = require('mongoose');
 
 dotenv.config();
 const User = require('../models/user');
+const Cart = require('../models/cart');
 
 //to view your account
 route.get('/my_account', check_jwt_token, async (req, res) => {
@@ -314,8 +315,17 @@ route.delete('/delete_account', check_jwt_token, async (req, res) => {
         if (!account) {
             return res.status(404).send({ 'status': 'error', msg: 'User not found' });
         }
+        //delete the user's profile picture from cloudinary
+        if (account.profile_img_id) {
+            let img_id = account.profile_img_id
+            await cloudinary.uploader.destroy(img_id);
+        }
+
         //to delete the account
         await User.findByIdAndDelete(user_id);
+        //delete the user's cart
+        await Cart.findOneAndDelete({ user_id: user_id });
+
         return res.status(200).send({ status: 'ok', msg: "Successfully deleted" });
     } catch (e) {
         console.error("error deleting account ----->>>", e);

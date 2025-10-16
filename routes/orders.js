@@ -8,12 +8,11 @@ const Item = require('../models/item');
 const Order = require('../models/order');
 const User = require('../models/user');
 const Review = require('../models/review');
-const { findById } = require('../models/counter');
 
 //to finalize an order
-route.post('/confirm', check_jwt_token, async (req, res) => {
+route.post('/confirm/:order_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
-    const { order_id } = req.body;
+    const { order_id } = req.params;
     if (!order_id) {
         return res.status(400).send({ status: 'error', msg: "No order id" })
     }
@@ -43,8 +42,10 @@ route.post('/confirm', check_jwt_token, async (req, res) => {
             const item_id = order_item.item_id && order_item.item_id._id ? order_item.item_id._id : order_item.item_id;
             const item = await Item.findById(item_id);
             if (item) {
-                item.times_bought += 1;
-                item.units_bought += order_item.quantity;
+                item.times_bought += 1; // Increment times bought by 1
+                item.units_bought += order_item.quantity; // Increment units bought by the quantity in the order
+                item.quantity -= order_item.quantity; // Deduct the purchased quantity from stock
+                if (item.quantity < 0) item.quantity = 0; // Prevent negative stock
                 await item.save();
             }
         }
@@ -55,6 +56,49 @@ route.post('/confirm', check_jwt_token, async (req, res) => {
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
     }
 });
+
+
+//to confirm you have recieved an order
+route.post('/:order_id/confirm_delivery', check_jwt_token, async (req, res) => {
+    const { order_id } = req.params;
+    const { recieved } = req.query;
+    if (!order_id || !recieved) {
+        return res.sendStatus(400)({ status: "error", msg: "Bad request" })
+    }
+
+    //check if the order id is valid
+    if (!mongoose.Types.ObjectId.isValid(order_id)) {
+        return res.status(400).send({ status: "error", msg: "Invalid order ID" });
+    }
+
+    //check if the user confirmed yes or no
+    if (recieved === "no") {
+        return res.status(200).send({ status: "ok", msg: "support will be contacted and get back to you with a form" })
+    }
+
+    try {
+        //find the order and update it to delivered
+        const order = await Order.findById(order_id).lean();
+        if (!order) {
+            return res.status(404).send({ status: "error", msg: "No order found" })
+        }
+
+        if (order.delivery_status !== "shipped") {
+            console.log(order.delivery_status)
+            return res.status(403).send({ status: "error", msg: "Order already delivered, cancelled or still pending" })
+        }
+
+        const delivered_order = await Order.findByIdAndUpdate(order_id,
+            { delivery_status: "delivered" }, { new: true }
+        ).select('_id, items, total_amount, delivery_status').lean();
+
+        return res.status(200).send({ status: "Success", msg: "Order delivered. Thanks for shopping", delivered_order })
+    } catch (e) {
+        console.error("Some error occurred ----->>>", e);
+        return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
+    }
+});
+
 
 
 //to view my orders
@@ -110,9 +154,9 @@ route.get('/view/:order_id', check_jwt_token, async (req, res) => {
 
 //to cancel an order
 //NOTE: only pending orders can be cancelled, no refunds after payment
-route.post('/cancel', check_jwt_token, async (req, res) => {
+route.post('/cancel/:order_id', check_jwt_token, async (req, res) => {
     const { user_id } = req.user;
-    const { order_id } = req.body;
+    const { order_id } = req.params;
     if (!order_id) {
         return res.status(400).send({ status: 'error', msg: "No order id" })
     }
@@ -130,6 +174,11 @@ route.post('/cancel', check_jwt_token, async (req, res) => {
         if (order.delivery_status !== "pending" || order.payment_status === "paid") {
             return res.status(403).send({ status: "error", msg: "Only pending orders can be cancelled" })
         }
+        //cancel the order
+        const cancelled_order = await Order.findByIdAndUpdate(order_id,
+            { delivery_status: "cancelled" }, { new: true }
+        ).select('-__v, -user_id').lean();
+        return res.status(200).send({ status: "ok", msg: "Order cancelled", order: cancelled_order })
     } catch (e) {
         console.error("Error canceling order ----->>>", e);
         return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
@@ -212,62 +261,6 @@ route.post('/rate&review/like/:review_id/:flag', check_jwt_token, async (req, re
     }
 });
 
-
-// //to remove a like on a review
-// route.put('/rate&review/remove_like/:review_id', check_jwt_token, async (req, res) => {
-//     const { review_id } = req.params;
-//     await Review.findByIdAndUpdate(review_id,
-//         {
-//             $inc: {
-//                 likes: -1
-//             }
-//         }
-//     ).lean();
-//     return res.sendStatus(200)("Success");
-// });
-
-
-
-//to confirm you have recieved an order
-route.post('/:order_id/confirm_delivery', check_jwt_token, async (req, res) => {
-    const { order_id } = req.params;
-    const { recieved } = req.query;
-    if (!order_id || !recieved) {
-        return res.sendStatus(400)({ status: "error", msg: "Bad request" })
-    }
-
-    //check if the order id is valid
-    if (!mongoose.Types.ObjectId.isValid(order_id)) {
-        return res.status(400).send({ status: "error", msg: "Invalid order ID" });
-    }
-
-    //check if the user confirmed yes or no
-    if (recieved === "no") {
-        return res.status(200).send({ status: "ok", msg: "support will be contacted and get back to you with a form" })
-    }
-
-    try {
-        //find the order and update it to delivered
-        const order = await Order.findById(order_id).lean();
-        if (!order) {
-            return res.status(404).send({ status: "error", msg: "No order found" })
-        }
-
-        if (order.delivery_status !== "shipped") {
-            console.log(order.delivery_status)
-            return res.status(403).send({ status: "error", msg: "Order already delivered, cancelled or still pending" })
-        }
-
-        const delivered_order = await Order.findByIdAndUpdate(order_id,
-            { delivery_status: "delivered" }, { new: true }
-        ).select('_id, items, total_amount, delivery_status').lean();
-
-        return res.status(200).send({ status: "Success", msg: "Order delivered. Thanks for shopping", delivered_order })
-    } catch (e) {
-        console.error("Some error occurred ----->>>", e);
-        return res.status(500).send({ status: "error", msg: "some error occurred", error: e.msg })
-    }
-});
 
 
 module.exports = route;
