@@ -98,7 +98,7 @@ route.get('/popular', async (req, res) => {
         let msg = `Success, ${count} results found`;
         if (count === 0) {
             msg = "No products"
-            return res.status(404).send({ msg })
+            return res.status(204).send({ msg })
         }
         return res.status(200).send({ msg, items })
     } catch (e) {
